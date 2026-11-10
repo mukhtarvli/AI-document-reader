@@ -13,7 +13,9 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt"];
 
-function FileUpload() {
+function FileUpload() {// -----------------------------------
+
+  // vars -------
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -23,6 +25,8 @@ function FileUpload() {
   const [isLoading, setIsLoading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [question, setQuestion] = useState("");
+
+  // functions -----------------
 
   const validateFile = (selectedFile: File) => {
     const extension = selectedFile.name
@@ -71,11 +75,11 @@ function FileUpload() {
     setError("");
   };
 
- 
+
 
   const handleAnalyze = async () => {
     if (!file) return;
-    
+
     setIsLoading(true);
     setSummary("");
 
@@ -84,7 +88,7 @@ function FileUpload() {
 
     const formData = new FormData();
     formData.append("file", file);
-    
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -119,7 +123,7 @@ function FileUpload() {
       }
 
     } catch (error) {
-      
+
       if (error instanceof Error && error.name === "AbortError") {
         return;
       }
@@ -136,14 +140,46 @@ function FileUpload() {
       setIsLoading(false);
     }
   };
-  
+
   const handleStop = () => {
     abortControllerRef.current?.abort();
   };
 
+  //chatting -----------------------------------------------
+
+  const chatting = async () =>{
+    try {
+
+      const response = await fetch("http://127.0.0.1:8000/ask",{
+        method:"POST",
+        headers: {
+        "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ question }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to send question");
+      }
+
+      const data = await response.json();
+
+      console.log(data.answer);
+
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
+    }
+  }
+
+
+
 
   return (
-    <div className="w-full max-w-2xl">
+   <div className="mx-auto w-full max-w-4xl px-4">
       <div
         onDragOver={(event) => {
           event.preventDefault();
@@ -232,11 +268,11 @@ function FileUpload() {
         type="button"
         disabled={!file && !isLoading}
         onClick={handleAnalyze}
-        className="mt-6 w-full rounded-xl bg-indigo-600 px-6 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+        className="mt-6 w-full cursor-pointer rounded-xl bg-indigo-600 px-6 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {isLoading ? "Analyzing document..." : "Analyze Document"}
       </button>
-      
+
 
       {isLoading && (
         <button
@@ -248,8 +284,8 @@ function FileUpload() {
         </button>
       )}
 
-      
-      <div className="flex h-[500px] flex-col">
+
+
 
       {error && (
         <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
@@ -259,44 +295,51 @@ function FileUpload() {
         </div>
       )}
 
-      
-      
-      {summary && (
-        <div className="mt-8 rounded-xl border border-indigo-500/30 bg-slate-900 p-6">
-          <h2 className="mb-4 text-xl font-semibold text-indigo-400">
-            ✨ AI Summary
-          </h2>
-          <div className="prose prose-invert prose-indigo max-w-none">
-            <ReactMarkdown>{summary}</ReactMarkdown>
+
+
+
+      <div className="flex h-[650px] w-full flex-col overflow-hidden rounded-2xl border border-indigo-500/20 bg-slate-900">
+
+        {/* Scrollable Summary */}
+        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-8 py-6">
+          {summary && (
+            <>
+              <h2 className="mb-6 text-xl font-semibold text-indigo-400">
+                ✨ AI Summary
+              </h2>
+
+              <div className="prose prose-invert prose-indigo max-w-none leading-relaxed">
+                <ReactMarkdown>{summary}</ReactMarkdown>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Chat Input */}
+        <div className="shrink-0 border-t border-slate-700/60 bg-slate-900 p-4">
+          <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2">
+            <input
+              type="text"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Ask anything about this document..."
+              className="min-w-0 flex-1 bg-transparent px-3 py-2 text-white outline-none placeholder:text-slate-400"
+            />
+
+            <button
+              type="button"
+              onClick={chatting}
+              disabled={!question.trim() && isLoading}
+              className="cursor-pointer rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-40"
+            >
+              Ask
+            </button>
           </div>
         </div>
-      )}
-      
-      
-    <div className="sticky bottom-0 z-10 bg-slate-900 pt-4 pb-3">
-      <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-800 p-2">
-        <input
-          type="text"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask anything about this document..."
-          className="flex-1 min-w-0 bg-transparent px-3 py-2 text-white outline-none placeholder:text-slate-400"
-        />
-
-        <button
-          type="button"
-          disabled={!question.trim()}
-          className="rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white transition hover:bg-indigo-700 disabled:opacity-40"
-        >
-          Ask
-        </button>
       </div>
-    </div>
-    </div>
 
 
-      
-      
+
       {/* {extractedText && (
         <div className="mt-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
           <h2 className="mb-4 text-xl font-semibold text-indigo-400">

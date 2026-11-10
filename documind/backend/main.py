@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 load_dotenv()
 
@@ -14,26 +15,6 @@ client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv("OPENROUTER_API_KEY")
 )
-
-
-
-def summarize_document(text: str):
-    response = client.responses.create(
-        model="openrouter/free",
-        instructions=(
-            "You are DocuMind, an AI document assistant. "
-            "Summarize the provided document clearly and accurately. "
-            "Explain the main ideas in simple language. "
-            "Include the most important key takeaways. "
-            "Do not invent information that is not in the document."
-        ),
-        input=text,
-        max_output_tokens=800
-    )
-
-    return response.output_text
-
-
 
 def stream_summary(text: str):
     stream = client.chat.completions.create(
@@ -65,6 +46,7 @@ def stream_summary(text: str):
 
 app = FastAPI()
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -75,6 +57,9 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+
+
 
 @app.get("/")
 def home():
@@ -125,6 +110,12 @@ async def upload_file(file: UploadFile = File(...)):
         headers={"Cache-Control": "no-cache"}
     )
 
+class QuestionRequest(BaseModel):
+    question: str
+
+@app.post("/ask")
+async def ask_question(request: QuestionRequest):
+    return {"answer": "youre hired"}
 
 
 
