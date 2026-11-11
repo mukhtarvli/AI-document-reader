@@ -104,7 +104,7 @@ function FileUpload() {// -----------------------------------
     setDocumentId(null);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/upload", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/upload`, {
         method: "POST",
         body: formData,
         signal: controller.signal,
@@ -114,7 +114,7 @@ function FileUpload() {// -----------------------------------
       if (!response.ok || !response.body) {
         throw new Error("Failed to analyze document");
       }
-      
+
       const newDocumentId = response.headers.get("X-Document-ID");
 
       if (!newDocumentId) {
@@ -193,7 +193,7 @@ function FileUpload() {// -----------------------------------
     const question = _question.trim();
 
     if (!question) return;
-    
+
 
     try {
       setError("");
@@ -209,14 +209,14 @@ function FileUpload() {// -----------------------------------
       ]);
 
       set_question("");
-   
 
-      const response = await fetch("http://127.0.0.1:8000/ask", {
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/ask`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           question: question,
           document_id: documentId,
           history: messages.map((message) => ({
