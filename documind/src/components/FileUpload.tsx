@@ -27,7 +27,6 @@ function FileUpload() {// -----------------------------------
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-  const [extractedText, setExtractedText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   // const [summary, setSummary] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -94,7 +93,6 @@ function FileUpload() {// -----------------------------------
     setIsLoading(true);
     // setSummary("");
 
-    setExtractedText("");
 
     const formData = new FormData();
     formData.append("file", file);
