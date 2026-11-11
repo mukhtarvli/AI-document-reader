@@ -55,7 +55,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[ "https://ai-document-reader-beige.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,7 +72,7 @@ class QuestionRequest(BaseModel):
     question: str
     document_id: str | None = None
     history: list[ChatMessage] = []
-    
+
 
 
 
@@ -136,7 +136,7 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.post("/ask")
 async def ask_question(request: QuestionRequest):
-    
+
     if request.document_id:
         document_text = documents.get(request.document_id)
 
