@@ -16,15 +16,26 @@ const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt"];
 function FileUpload() {// -----------------------------------
 
   // vars -------
+
+
+  type Message = {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+  };
+
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [extractedText, setExtractedText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [summary, setSummary] = useState("");
+  // const [summary, setSummary] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const [question, setQuestion] = useState("");
+  const [_question, set_question] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+
+
 
   // functions -----------------
 
@@ -81,9 +92,8 @@ function FileUpload() {// -----------------------------------
     if (!file) return;
 
     setIsLoading(true);
-    setSummary("");
+    // setSummary("");
 
-    setSummary("");
     setExtractedText("");
 
     const formData = new FormData();
@@ -106,6 +116,15 @@ function FileUpload() {// -----------------------------------
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      const summaryId = crypto.randomUUID();
+
+      setMessages([
+        {
+          id: summaryId,
+          role: "assistant",
+          content: "",
+        },
+      ]);
 
       while (true) {
         const { done, value } = await reader.read();
@@ -114,12 +133,25 @@ function FileUpload() {// -----------------------------------
 
         const chunk = decoder.decode(value, { stream: true });
 
-        setSummary((previous) => previous + chunk);
-      }
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === summaryId
+            ? { ...message, content: message.content + chunk }
+            : message
+        )
+      );
 
       const remaining = decoder.decode();
-      if (remaining) {
-        setSummary((previous) => previous + remaining);
+
+        if (remaining) {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === summaryId
+                ? { ...message, content: message.content + remaining }
+                : message
+            )
+          );
+        }
       }
 
     } catch (error) {
@@ -147,25 +179,84 @@ function FileUpload() {// -----------------------------------
 
   //chatting -----------------------------------------------
 
-  const chatting = async () =>{
-    try {
 
-      const response = await fetch("http://127.0.0.1:8000/ask",{
-        method:"POST",
+  const chatting = async () => {
+    const question = _question.trim();
+
+    if (!question) return;
+
+    try {
+      setError("");
+
+      // Add user question to conversation
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: question,
+        },
+      ]);
+
+      set_question("");
+
+      const response = await fetch("http://127.0.0.1:8000/ask", {
+        method: "POST",
         headers: {
-        "Content-Type": "application/json",
-  },
-  body: JSON.stringify({ question }),
-      })
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ question: question }),
+      });
 
       if (!response.ok) {
         throw new Error("Failed to send question");
       }
+      const assistantId = crypto.randomUUID();
 
-      const data = await response.json();
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+        },
+      ]);
 
-      console.log(data.answer);
+      const reader = response.body?.getReader();
 
+      if (!reader) {
+        throw new Error("No response stream available");
+      }
+
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantId
+              ? { ...message, content: message.content + chunk }
+              : message
+          )
+        );
+      }
+
+      const remaining = decoder.decode();
+
+      if (remaining) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantId
+              ? { ...message, content: message.content + remaining }
+              : message
+          )
+        );
+      }
     } catch (error) {
       setError(
         error instanceof Error
@@ -173,7 +264,7 @@ function FileUpload() {// -----------------------------------
           : "Something went wrong. Please try again."
       );
     }
-  }
+  };
 
 
 
@@ -295,62 +386,90 @@ function FileUpload() {// -----------------------------------
         </div>
       )}
 
+    <div className="flex h-[650px] w-full flex-col overflow-hidden rounded-2xl border border-indigo-500/20 bg-slate-900">
 
+      {/* Scrollable Messages */}
+      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-6">
+        <div className="mx-auto max-w-3xl space-y-8">
 
-
-      <div className="flex h-[650px] w-full flex-col overflow-hidden rounded-2xl border border-indigo-500/20 bg-slate-900">
-
-        {/* Scrollable Summary */}
-        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-8 py-6">
-          {summary && (
-            <>
-              <h2 className="mb-6 text-xl font-semibold text-indigo-400">
-                ✨ AI Summary
-              </h2>
-
-              <div className="prose prose-invert prose-indigo max-w-none leading-relaxed">
-                <ReactMarkdown>{summary}</ReactMarkdown>
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${
+                message.role === "user"
+                  ? "justify-end"
+                  : "justify-start"
+              }`}
+            >
+              <div
+                className={
+                  message.role === "user"
+                    ? "max-w-[80%] rounded-3xl bg-slate-800 px-5 py-3 text-white"
+                    : "w-full text-slate-100"
+                }
+              >
+                {message.role === "assistant" ? (
+                  <div className="prose prose-invert prose-indigo max-w-none leading-relaxed">
+                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap text-sm leading-6">
+                    {message.content}
+                  </p>
+                )}
               </div>
-            </>
-          )}
-        </div>
+            </div>
+          ))}
 
-        {/* Chat Input */}
-        <div className="shrink-0 border-t border-slate-700/60 bg-slate-900 p-4">
-          <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2">
+        </div>
+      </div>
+
+      {/* Chat Input */}
+      <div className="shrink-0 bg-slate-900 px-4 pb-4 pt-2">
+        <div className="mx-auto max-w-3xl">
+
+          <div className="flex items-center gap-3 rounded-3xl border border-slate-700 bg-slate-800 px-4 py-3">
+
             <input
               type="text"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
+              value={_question}
+              onChange={(e) => set_question(e.target.value)}
               placeholder="Ask anything about this document..."
-              className="min-w-0 flex-1 bg-transparent px-3 py-2 text-white outline-none placeholder:text-slate-400"
+              className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
             />
 
             <button
               type="button"
               onClick={chatting}
-              disabled={!question.trim() && isLoading}
-              className="cursor-pointer rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-40"
+              disabled={!_question.trim() || isLoading}
+              className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-indigo-600 text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Send message"
             >
-              Ask
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 19V5" />
+                <path d="m5 12 7-7 7 7" />
+              </svg>
             </button>
+
           </div>
+
+          <p className="mt-3 text-center text-xs text-slate-400">
+            Ask questions about your uploaded document
+          </p>
+
         </div>
       </div>
 
-
-
-      {/* {extractedText && (
-        <div className="mt-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
-          <h2 className="mb-4 text-xl font-semibold text-indigo-400">
-            Extracted Document Text
-          </h2>
-
-          <p className="whitespace-pre-wrap text-slate-300">
-            {extractedText}
-          </p>
-        </div>
-      )} */}
+    </div>
 
     </div>
   );

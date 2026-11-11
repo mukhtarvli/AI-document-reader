@@ -7,6 +7,12 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+import asyncio
+import json
+import httpx
+import uuid
+
+documents = {}
 
 load_dotenv()
 
@@ -49,14 +55,15 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Document-ID"],
 )
+
+class QuestionRequest(BaseModel):
+    question: str
 
 
 
@@ -104,19 +111,67 @@ async def upload_file(file: UploadFile = File(...)):
             detail="No readable text found in this PDF"
         )
 
+    document_id = str(uuid.uuid4())
+
+    documents[document_id] = extracted_text
+
     return StreamingResponse(
         stream_summary(extracted_text),
         media_type="text/plain",
-        headers={"Cache-Control": "no-cache"}
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Document-ID": document_id,
+        },
     )
 
-class QuestionRequest(BaseModel):
-    question: str
 
 @app.post("/ask")
 async def ask_question(request: QuestionRequest):
-    return {"answer": "youre hired"}
+    async def generate_answer():
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream(
+                "POST",
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "openrouter/free",
+                    "stream": True,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are DocuMind, a helpful AI assistant.",
+                        },
+                        {"role": "user", "content": request.question},
+                    ],
+                },
+            ) as response:
+                response.raise_for_status()
 
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
 
+                    data = line[6:]
 
+                    if data == "[DONE]":
+                        break
 
+                    try:
+                        chunk = json.loads(data)
+
+                        content = (
+                            chunk.get("choices", [{}])[0]
+                            .get("delta", {})
+                            .get("content")
+                        )
+
+                        if content:
+                            yield content
+
+                    except (json.JSONDecodeError, IndexError):
+                        continue
+
+    return StreamingResponse(generate_answer(), media_type="text/plain")
