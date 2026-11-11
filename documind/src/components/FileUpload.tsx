@@ -34,7 +34,7 @@ function FileUpload() {// -----------------------------------
   const abortControllerRef = useRef<AbortController | null>(null);
   const [_question, set_question] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
-
+  const [documentId, setDocumentId] = useState<string | null>(null);
 
 
   // functions -----------------
@@ -101,6 +101,7 @@ function FileUpload() {// -----------------------------------
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    setDocumentId(null);
 
     try {
       const response = await fetch("http://127.0.0.1:8000/upload", {
@@ -113,6 +114,14 @@ function FileUpload() {// -----------------------------------
       if (!response.ok || !response.body) {
         throw new Error("Failed to analyze document");
       }
+      
+      const newDocumentId = response.headers.get("X-Document-ID");
+
+      if (!newDocumentId) {
+        throw new Error("Document ID was not returned by the server");
+      }
+
+      setDocumentId(newDocumentId);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -184,6 +193,7 @@ function FileUpload() {// -----------------------------------
     const question = _question.trim();
 
     if (!question) return;
+    
 
     try {
       setError("");
@@ -199,13 +209,21 @@ function FileUpload() {// -----------------------------------
       ]);
 
       set_question("");
+   
 
       const response = await fetch("http://127.0.0.1:8000/ask", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ question: question }),
+        body: JSON.stringify({ 
+          question: question,
+          document_id: documentId,
+          history: messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        }),
       });
 
       if (!response.ok) {
@@ -434,6 +452,12 @@ function FileUpload() {// -----------------------------------
               type="text"
               value={_question}
               onChange={(e) => set_question(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && _question.trim() && !isLoading) {
+                  e.preventDefault();
+                  chatting();
+                }
+              }}
               placeholder="Ask anything about this document..."
               className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
             />
@@ -441,7 +465,7 @@ function FileUpload() {// -----------------------------------
             <button
               type="button"
               onClick={chatting}
-              disabled={!_question.trim() || isLoading}
+              disabled={!_question.trim() || isLoading }
               className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-indigo-600 text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Send message"
             >

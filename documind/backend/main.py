@@ -62,8 +62,17 @@ app.add_middleware(
     expose_headers=["X-Document-ID"],
 )
 
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
 class QuestionRequest(BaseModel):
     question: str
+    document_id: str | None = None
+    history: list[ChatMessage] = []
+    
 
 
 
@@ -127,6 +136,41 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.post("/ask")
 async def ask_question(request: QuestionRequest):
+    
+    if request.document_id:
+        document_text = documents.get(request.document_id)
+
+        if document_text is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found"
+            )
+        system_prompt = (
+            "You are DocuMind, a helpful AI assistant. "
+            "You have access to an uploaded document. "
+            "When the user asks a question about the document, "
+            "use the document content to provide an accurate answer. "
+            "When the user asks a general question unrelated to the document, "
+            "answer using your general knowledge. "
+            "If the user specifically asks about information in the document "
+            "and the answer is not available, clearly say so. "
+            "Never invent information about the document."
+        )
+
+        user_prompt = (
+            f"DOCUMENT CONTENT:\n{document_text}\n\n"
+            f"QUESTION:\n{request.question}"
+        )
+
+    else:
+        system_prompt = (
+            "You are DocuMind, a helpful AI assistant. "
+            "Answer the user's questions clearly and accurately."
+        )
+
+        user_prompt = request.question
+
+    # Keep your existing generate_answer() here
     async def generate_answer():
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
@@ -140,13 +184,23 @@ async def ask_question(request: QuestionRequest):
                     "model": "openrouter/free",
                     "stream": True,
                     "messages": [
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    *[
                         {
-                            "role": "system",
-                            "content": "You are DocuMind, a helpful AI assistant.",
-                        },
-                        {"role": "user", "content": request.question},
+                            "role": message.role,
+                            "content": message.content
+                        }
+                        for message in request.history
                     ],
-                },
+                    {
+                        "role": "user",
+                        "content": user_prompt
+                    }
+                ]
+            },
             ) as response:
                 response.raise_for_status()
 
